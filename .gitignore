@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+
+# Виртуальное окружение
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Локальные данные приложения (не коммитим)
+*.sqlite
+*.sqlite-journal
+sketch_db.sqlite
+
+# Выходные артефакты пользователя
+*.dxf
+
+# Логи
+*.log
