@@ -6,7 +6,7 @@ from pathlib import Path
 
 import ezdxf
 
-from core.models import Calibration, CannyParams, Polyline, Project, ProjectState
+from core.models import Calibration, CannyParams, Circle, Polyline, Project, ProjectState
 
 
 class FileOperations:
@@ -83,12 +83,12 @@ class FileOperations:
     @staticmethod
     def export_dxf_placeholder(
         target_file: Path,
-        polylines: list[Polyline],
+        polylines: list[Polyline | Circle],
         project: Project,
         calibration: Calibration,
         canny_params: CannyParams,
     ) -> None:
-        """Экспорт эскиза в DXF (LWPOLYLINE, слой SKETCH, единицы мм)."""
+        """Экспорт эскиза в DXF (LWPOLYLINE + CIRCLE, слой SKETCH, единицы мм)."""
         if target_file.suffix.lower() != ".dxf":
             raise ValueError("Файл экспорта должен иметь расширение .dxf")
         target_file.parent.mkdir(parents=True, exist_ok=True)
@@ -99,12 +99,18 @@ class FileOperations:
             doc.layers.add("SKETCH", color=5)
         msp = doc.modelspace()
 
-        for poly in polylines:
-            if not poly.points or len(poly.points) < 2:
+        for ent in polylines:
+            if isinstance(ent, Circle):
+                msp.add_circle(
+                    (ent.cx, ent.cy), ent.radius,
+                    dxfattribs={"layer": "SKETCH"},
+                )
                 continue
-            closed = poly.points[0] == poly.points[-1]
+            if not ent.points or len(ent.points) < 2:
+                continue
+            closed = ent.points[0] == ent.points[-1]
             msp.add_lwpolyline(
-                poly.points,
+                ent.points,
                 dxfattribs={"layer": "SKETCH", "closed": closed},
             )
 

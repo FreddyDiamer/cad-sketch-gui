@@ -26,7 +26,7 @@ from core.contour_detector import ContourDetector
 from core.database_operations import DatabaseOperations
 from core.file_operations import FileOperations
 from core.image_loader import ImageLoader
-from core.models import Calibration, CannyParams, Polyline, Project, ProjectState
+from core.models import Calibration, CannyParams, Circle, Polyline, Project, ProjectState
 from core.sketch_generator import SketchGenerator
 from ui.dialogs.about_dialog import AboutDialog
 from ui.dialogs.calibration_dialog import CalibrationDialog
@@ -548,11 +548,11 @@ class MainWindow(QMainWindow):
         if dlg.exec() != dlg.DialogCode.Accepted:
             return
 
-        entities: list[Polyline] = []
+        entities: list[Polyline | Circle] = []
         if isinstance(self._state.sketch, dict):
             raw = self._state.sketch.get("entities", [])
             if isinstance(raw, list):
-                entities = [e for e in raw if isinstance(e, Polyline)]
+                entities = [e for e in raw if isinstance(e, (Polyline, Circle))]
 
         if not entities:
             self._show_warning(

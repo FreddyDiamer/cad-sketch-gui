@@ -13,6 +13,15 @@ class Polyline:
 
 
 @dataclass(frozen=True)
+class Circle:
+    """Окружность с центром (cx, cy) и радиусом."""
+
+    cx: float
+    cy: float
+    radius: float
+
+
+@dataclass(frozen=True)
 class Calibration:
     """Калибровка масштаба."""
 

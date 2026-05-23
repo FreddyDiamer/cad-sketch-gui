@@ -4,10 +4,17 @@ from pathlib import Path
 
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
 from PyQt6.QtCore import QRectF
-from PyQt6.QtGui import QColor, QImage, QPainterPath, QPen, QPixmap, QWheelEvent
-from PyQt6.QtWidgets import QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
+from PyQt6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen, QPixmap, QWheelEvent
+from PyQt6.QtWidgets import (
+    QGraphicsEllipseItem,
+    QGraphicsItem,
+    QGraphicsPathItem,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsView,
+)
 
-from core.models import Polyline
+from core.models import Circle, Polyline
 
 class WorkspaceView(QGraphicsView):
     """Рабочая область: просмотр изображения и примитивные оверлеи (контуры)."""
@@ -17,7 +24,10 @@ class WorkspaceView(QGraphicsView):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setRenderHints(self.renderHints())
+        self.setRenderHints(
+            QPainter.RenderHint.Antialiasing
+            | QPainter.RenderHint.SmoothPixmapTransform
+        )
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
@@ -28,8 +38,8 @@ class WorkspaceView(QGraphicsView):
         self.setScene(self._scene)
 
         self._image_item: QGraphicsPixmapItem | None = None
-        self._contour_items: list[QGraphicsPathItem] = []
-        self._sketch_items: list[QGraphicsPathItem] = []
+        self._contour_items: list[QGraphicsItem] = []
+        self._sketch_items: list[QGraphicsItem] = []
         self._zoom = 1.0
 
     def clear_all(self) -> None:
@@ -150,8 +160,8 @@ class WorkspaceView(QGraphicsView):
 
     def _draw_polylines(
         self,
-        target_list: list[QGraphicsPathItem],
-        polylines: list[Polyline],
+        target_list: list[QGraphicsItem],
+        polylines: list[Polyline | Circle],
         color: QColor,
         width: int,
         z: int,
@@ -165,18 +175,26 @@ class WorkspaceView(QGraphicsView):
 
         pen = QPen(color)
         pen.setWidth(width)
+        pen.setCosmetic(True)  # толщина не меняется при зуме
 
-        for poly in polylines:
-            if len(poly.points) < 2:
-                continue
-            path = QPainterPath()
-            x0, y0 = poly.points[0]
-            path.moveTo(x0, y0)
-            for x, y in poly.points[1:]:
-                path.lineTo(x, y)
+        for ent in polylines:
+            if isinstance(ent, Circle):
+                item: QGraphicsItem = QGraphicsEllipseItem(
+                    ent.cx - ent.radius, ent.cy - ent.radius,
+                    ent.radius * 2, ent.radius * 2,
+                )
+                item.setPen(pen)
+            else:
+                if len(ent.points) < 2:
+                    continue
+                path = QPainterPath()
+                x0, y0 = ent.points[0]
+                path.moveTo(x0, y0)
+                for x, y in ent.points[1:]:
+                    path.lineTo(x, y)
+                item = QGraphicsPathItem(path)
+                item.setPen(pen)
 
-            item = QGraphicsPathItem(path)
-            item.setPen(pen)
             item.setZValue(z)
             self._scene.addItem(item)
             target_list.append(item)
