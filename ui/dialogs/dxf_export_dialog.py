@@ -22,8 +22,11 @@ class DxfExportDialog(QDialog):
         self.setWindowTitle("Экспорт DXF")
         self.setModal(True)
 
+        self._default_name = f"{project_name}.dxf" if project_name else "sketch.dxf"
+
         self._file_edit = QLineEdit()
-        self._file_edit.setPlaceholderText("Например: /path/to/sketch.dxf")
+        self._file_edit.setText(self._default_name)
+        self._file_edit.setPlaceholderText(f"Например: /path/to/{self._default_name}")
         browse_btn = QPushButton("Выбрать…")
         browse_btn.clicked.connect(self._choose_file)
 
@@ -55,10 +58,13 @@ class DxfExportDialog(QDialog):
         return self._target_file
 
     def _choose_file(self) -> None:
+        # Используем то, что уже введено в поле, как стартовое имя/путь —
+        # пользователь увидит привычное «<имя_проекта>.dxf» в системном диалоге.
+        start = self._file_edit.text().strip() or self._default_name
         file_name, _ = QFileDialog.getSaveFileName(
             self,
             "Экспорт DXF",
-            "sketch.dxf",
+            start,
             "DXF (*.dxf)",
         )
         if file_name:
