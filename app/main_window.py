@@ -100,6 +100,9 @@ class MainWindow(QMainWindow):
 
         self._workspace.zoomChanged.connect(self._on_zoom_changed)
         self._workspace.mouseScenePosChanged.connect(self._on_mouse_pos_changed)
+        self._workspace.calibrationPoint1Set.connect(self._on_calib_point1)
+        self._workspace.calibrationCompleted.connect(self._on_calib_completed)
+        self._workspace.calibrationCancelled.connect(self._on_calib_cancelled)
 
         self._actions = self._build_actions()
         self._build_menus(self._actions)
@@ -353,6 +356,14 @@ class MainWindow(QMainWindow):
             return
         super().closeEvent(event)
 
+    def keyPressEvent(self, event) -> None:  # type: ignore[override]
+        if event.key() == Qt.Key.Key_Escape and self._workspace.is_calibration_mode():
+            self._workspace.set_calibration_mode(False)
+            self._workspace.calibrationCancelled.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     # --- Handlers ---
 
     def _on_project_create(self) -> None:
@@ -469,19 +480,56 @@ class MainWindow(QMainWindow):
     def _on_calibration(self) -> None:
         if self._state.project is None or self._state.image_path is None:
             return
+        self._workspace.set_calibration_mode(True)
+        self.statusBar().showMessage("Калибровка: кликните первую точку на изображении")
+        self._log("Режим калибровки активирован")
 
-        dlg = CalibrationDialog(initial=self._state.calibration, parent=self)
-        if dlg.exec() != dlg.DialogCode.Accepted:
+    def _on_calib_point1(self, x: int, y: int) -> None:
+        self.statusBar().showMessage(
+            f"Калибровка: первая точка ({x}, {y}) — кликните вторую точку"
+        )
+
+    def _on_calib_completed(self, x1: int, y1: int, x2: int, y2: int) -> None:
+        import math
+        pixel_dist = math.hypot(x2 - x1, y2 - y1)
+        if pixel_dist < 1.0:
+            self._show_warning("Калибровка", "Точки слишком близко. Выберите другие точки.")
+            self._workspace.set_calibration_mode(False)
             return
 
-        self._state.calibration = dlg.calibration
+        dlg = CalibrationDialog(
+            pixel_distance=pixel_dist,
+            initial=self._state.calibration,
+            parent=self,
+        )
+        accepted = dlg.exec() == dlg.DialogCode.Accepted
+        self._workspace.set_calibration_mode(False)
+
+        if not accepted:
+            self.statusBar().showMessage("Калибровка отменена")
+            self._log("Калибровка отменена")
+            return
+
+        self._state.calibration = Calibration(
+            real_distance=dlg.real_distance,
+            units=dlg.units,
+            x1=x1, y1=y1, x2=x2, y2=y2,
+        )
         self._state.is_dirty = True
-        self._log(f"Калибровка: {dlg.calibration.real_distance:g} {dlg.calibration.units}")
+        scale = self._state.calibration.scale_mm_per_pixel
+        self._log(
+            f"Калибровка: {dlg.real_distance:g} {dlg.units} "
+            f"({pixel_dist:.1f} px → {scale:.4f} мм/пкс)"
+        )
         self.statusBar().showMessage(
-            f"Калибровка задана: {dlg.calibration.real_distance:g} {dlg.calibration.units}"
+            f"Калибровка задана: {dlg.real_distance:g} {dlg.units}"
         )
         self._refresh_project_panel()
         self._refresh_title()
+
+    def _on_calib_cancelled(self) -> None:
+        self.statusBar().showMessage("Калибровка отменена")
+        self._log("Калибровка отменена")
 
     def _on_canny(self) -> None:
         if self._state.project is None or self._state.image_path is None:
@@ -656,11 +704,13 @@ class MainWindow(QMainWindow):
         self._project_name_lbl.setText(self._state.project.name)
         self._project_file_lbl.setText(str(self._state.project.project_file))
         self._image_lbl.setText(self._state.image_path.name if self._state.image_path else "—")
-        self._calib_lbl.setText(
-            f"{self._state.calibration.real_distance:g} {self._state.calibration.units}"
-            if self._state.calibration
-            else "—"
-        )
+        if self._state.calibration:
+            c = self._state.calibration
+            self._calib_lbl.setText(
+                f"{c.real_distance:g} {c.units} ({c.scale_mm_per_pixel:.4f} мм/пкс)"
+            )
+        else:
+            self._calib_lbl.setText("—")
         self._canny_lbl.setText(
             f"{self._state.canny_params.low_threshold}/{self._state.canny_params.high_threshold}"
             if self._state.canny_params
