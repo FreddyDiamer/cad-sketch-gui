@@ -113,7 +113,7 @@ class WorkspaceView(QGraphicsView):
 
         import math
         dist = math.hypot(x2 - x1, y2 - y1)
-        label = QGraphicsSimpleTextItem(f"{dist:.1f} px")
+        label = QGraphicsSimpleTextItem(f"{dist:.1f} пикс.")
         label.setBrush(QColor(220, 50, 47))
         label.setPos((x1 + x2) / 2 + 8, (y1 + y2) / 2 + 8)
         label.setZValue(31)

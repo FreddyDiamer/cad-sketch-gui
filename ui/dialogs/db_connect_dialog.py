@@ -1,42 +1,56 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 
 class DbConnectDialog(QDialog):
+    """Диалог подключения к базе данных SQLite (выбор файла)."""
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Подключение к БД")
+        self.setWindowTitle("Подключение к базе данных")
         self.setModal(True)
 
-        self._host = QLineEdit()
-        self._host.setPlaceholderText("localhost")
-        self._db = QLineEdit()
-        self._db.setPlaceholderText("cad_db")
-        self._user = QLineEdit()
-        self._user.setPlaceholderText("user")
-        self._password = QLineEdit()
-        self._password.setEchoMode(QLineEdit.EchoMode.Password)
+        self._file_edit = QLineEdit()
+        self._file_edit.setPlaceholderText("Например: sketch_db.sqlite")
+        self._file_edit.setText("sketch_db.sqlite")
 
-        hint = QLabel("Для SQLite: укажите путь к файлу, например: /Users/.../sketch_db.sqlite")
+        browse_btn = QPushButton("Выбрать…")
+        browse_btn.clicked.connect(self._choose_file)
+
+        row = QHBoxLayout()
+        row.addWidget(self._file_edit, 1)
+        row.addWidget(browse_btn)
+        row_widget = QWidget()
+        row_widget.setLayout(row)
+
+        hint = QLabel(
+            "Подсистема использует встраиваемую СУБД SQLite. "
+            "Укажите путь к файлу базы данных; если файла нет, он будет создан."
+        )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: gray; font-size: 11px;")
+        hint.setStyleSheet("color: #8b949e; font-size: 11px;")
 
         form = QFormLayout()
-        form.addRow("Хост:", self._host)
-        form.addRow("База данных:", self._db)
+        form.addRow("Файл базы данных:", row_widget)
         form.addRow("", hint)
-        form.addRow("Пользователь:", self._user)
-        form.addRow("Пароль:", self._password)
 
-        self._buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self._buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
         self._buttons.accepted.connect(self._on_accept)
         self._buttons.rejected.connect(self.reject)
 
@@ -46,27 +60,26 @@ class DbConnectDialog(QDialog):
         self.setLayout(layout)
 
     @property
-    def host(self) -> str:
-        return self._host.text().strip()
-
-    @property
     def database(self) -> str:
-        return self._db.text().strip()
+        return self._file_edit.text().strip()
 
-    @property
-    def user(self) -> str:
-        return self._user.text().strip()
-
-    @property
-    def password(self) -> str:
-        return self._password.text()
+    def _choose_file(self) -> None:
+        start = self._file_edit.text().strip() or "sketch_db.sqlite"
+        file_name, _ = QFileDialog.getSaveFileName(
+            self,
+            "Выберите файл базы данных",
+            start,
+            "SQLite (*.sqlite *.db);;Все файлы (*)",
+        )
+        if file_name:
+            path = Path(file_name)
+            if path.suffix.lower() not in (".sqlite", ".db"):
+                path = path.with_suffix(".sqlite")
+            self._file_edit.setText(str(path))
 
     def _on_accept(self) -> None:
-        if not self.host:
-            self._host.setFocus()
-            return
         if not self.database:
-            self._db.setFocus()
+            self._file_edit.setFocus()
+            self._file_edit.setToolTip("Укажите путь к файлу базы данных")
             return
         self.accept()
-

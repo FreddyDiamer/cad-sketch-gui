@@ -8,8 +8,8 @@ from app.styles import DARK_QSS
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setOrganizationName("CADSketchGUI")
-    app.setApplicationName("CAD Sketch GUI")
+    app.setOrganizationName("Подсистема эскизов")
+    app.setApplicationName("Подсистема формирования эскизов")
     app.setStyle("Fusion")  # единообразная база для QSS на всех платформах
     app.setStyleSheet(DARK_QSS)
 

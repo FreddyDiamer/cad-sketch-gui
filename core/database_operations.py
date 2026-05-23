@@ -60,9 +60,8 @@ class DatabaseOperations:
     def is_connected(self) -> bool:
         return self._conn is not None
 
-    def connect(self, host: str, db: str, user: str, password: str) -> None:
-        # SQLite: host/user/password игнорируются, db — путь к файлу.
-        path = Path(db.strip() or "sketch_db.sqlite")
+    def connect(self, db_path: str) -> None:
+        path = Path(db_path.strip() or "sketch_db.sqlite")
         path.parent.mkdir(parents=True, exist_ok=True)
 
         conn = sqlite3.connect(str(path))

@@ -90,7 +90,7 @@ class MainWindow(QMainWindow):
 
         # --- Статус-бар: сообщения слева, инфо справа ---
         self._status_zoom = QLabel("100%")
-        self._status_pos = QLabel("X:0 Y:0")
+        self._status_pos = QLabel("Х: 0   У: 0")
         self._status_img = QLabel("—")
         for w in (self._status_img, self._status_pos, self._status_zoom):
             w.setStyleSheet("color: #57606a; padding: 0 8px;")
@@ -450,7 +450,7 @@ class MainWindow(QMainWindow):
         if dlg.exec() != dlg.DialogCode.Accepted:
             return
         try:
-            self._db.connect(dlg.host, dlg.database, dlg.user, dlg.password)
+            self._db.connect(dlg.database)
         except Exception as e:  # noqa: BLE001
             self._show_error("БД", f"Подключение не выполнено: {e}")
             return
@@ -528,7 +528,7 @@ class MainWindow(QMainWindow):
         self._status_zoom.setText(f"{int(z * 100)}%")
 
     def _on_mouse_pos_changed(self, p) -> None:
-        self._status_pos.setText(f"X:{p.x():.0f} Y:{p.y():.0f}")
+        self._status_pos.setText(f"Х: {p.x():.0f}   У: {p.y():.0f}")
 
     def _maybe_handle_unsaved(self) -> bool:
         if self._state.project is None or not self._state.is_dirty:

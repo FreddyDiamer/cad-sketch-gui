@@ -29,7 +29,7 @@ class CalibrationDialog(QDialog):
         self._pixel_distance = float(pixel_distance)
 
         # Информационная строка — только для чтения.
-        self._pixel_lbl = QLabel(f"{self._pixel_distance:.1f} px")
+        self._pixel_lbl = QLabel(f"{self._pixel_distance:.1f} пикс.")
 
         self._distance = QDoubleSpinBox()
         self._distance.setRange(0.01, 999999.0)

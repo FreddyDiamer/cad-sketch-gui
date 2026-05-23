@@ -26,7 +26,7 @@ class DxfExportDialog(QDialog):
 
         self._file_edit = QLineEdit()
         self._file_edit.setText(self._default_name)
-        self._file_edit.setPlaceholderText(f"Например: /path/to/{self._default_name}")
+        self._file_edit.setPlaceholderText(f"Например: {self._default_name}")
         browse_btn = QPushButton("Выбрать…")
         browse_btn.clicked.connect(self._choose_file)
 

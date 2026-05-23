@@ -83,7 +83,7 @@ class ProjectCreateDialog(QDialog):
 
         safe = re.sub(r"[^0-9A-Za-zА-Яа-я_-]+", "_", name).strip("_")
         if not safe:
-            safe = "project"
+            safe = "проект"
         self._project_file = Path(directory) / f"{safe}.json"
         self.accept()
 
