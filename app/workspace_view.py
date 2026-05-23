@@ -42,7 +42,10 @@ class WorkspaceView(QGraphicsView):
         self.setMouseTracking(True)
 
         self._scene = QGraphicsScene(self)
+        self._scene.setBackgroundBrush(QColor("#16181c"))
         self.setScene(self._scene)
+        self.setFrameShape(self.Shape.NoFrame)
+        self.setBackgroundBrush(QColor("#16181c"))
 
         self._image_item: QGraphicsPixmapItem | None = None
         self._contour_items: list[QGraphicsItem] = []

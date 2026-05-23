@@ -99,18 +99,24 @@ class FileOperations:
             doc.layers.add("SKETCH", color=5)
         msp = doc.modelspace()
 
+        # Координаты эскиза в пикселях — масштабируем в миллиметры по калибровке.
+        scale = calibration.scale_mm_per_pixel if calibration else 1.0
+        if scale <= 0:
+            scale = 1.0
+
         for ent in polylines:
             if isinstance(ent, Circle):
                 msp.add_circle(
-                    (ent.cx, ent.cy), ent.radius,
+                    (ent.cx * scale, ent.cy * scale), ent.radius * scale,
                     dxfattribs={"layer": "SKETCH"},
                 )
                 continue
             if not ent.points or len(ent.points) < 2:
                 continue
             closed = ent.points[0] == ent.points[-1]
+            scaled_pts = [(x * scale, y * scale) for x, y in ent.points]
             msp.add_lwpolyline(
-                ent.points,
+                scaled_pts,
                 dxfattribs={"layer": "SKETCH", "closed": closed},
             )
 
