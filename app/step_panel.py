@@ -1,3 +1,17 @@
+"""Боковая панель шагов — основной элемент интерфейса (wizard).
+
+Панель отображает шесть карточек-шагов: Проект → Изображение →
+Калибровка → Контуры → Эскиз → Экспорт DXF. Каждая карточка имеет
+три состояния (pending/active/done), визуально отличающиеся цветом
+и наличием синей левой полосы у активной карточки.
+
+Логика «что активно, а что выполнено» вычисляется в update_state()
+по текущему ProjectState и переключает карточки автоматически.
+
+Карточка №4 (Контуры) — особая: содержит встроенные элементы
+управления параметрами Canny с живым превью (debounce 300 мс),
+а не отдельный диалог.
+"""
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -19,13 +33,20 @@ from PyQt6.QtWidgets import (
 from core.models import CannyParams, Circle, Polyline, ProjectState
 
 
-_STATE_PENDING = "pending"
-_STATE_ACTIVE = "active"
-_STATE_DONE = "done"
+# Имена состояний карточки. Используются как значения Qt-property
+# для CSS-селекторов вида QFrame#stepCard[state="active"] (см. styles.py).
+_STATE_PENDING = "pending"   # шаг ещё не активен (приглушённая карточка)
+_STATE_ACTIVE = "active"     # шаг сейчас выполняется (синяя левая полоса)
+_STATE_DONE = "done"         # шаг успешно завершён (тёмная карточка + ✓)
 
 
 def _set_primary(btn: QPushButton, primary: bool) -> None:
-    """Переключает property primary и заставляет стиль перерисоваться."""
+    """Переключает «главную» кнопку (синяя заливка) и перерисовывает её.
+
+    Qt не перерисовывает виджет автоматически при смене динамического
+    property — нужно вручную выполнить unpolish/polish, иначе QSS-стиль
+    не обновится.
+    """
     btn.setProperty("primary", "true" if primary else "false")
     btn.style().unpolish(btn)
     btn.style().polish(btn)
@@ -33,16 +54,29 @@ def _set_primary(btn: QPushButton, primary: bool) -> None:
 
 
 def _repolish(w: QWidget) -> None:
+    """Принудительная перерисовка стиля после смены динамического property."""
     w.style().unpolish(w)
     w.style().polish(w)
     w.update()
 
 
 class _StepCard(QFrame):
-    """Карточка одного шага: бейдж, заголовок, value, контент."""
+    """Карточка одного шага визарда.
+
+    Структура карточки:
+        ┌──────────────────────────────────┐
+        │ [бейдж]  Заголовок шага          │
+        │          текущее значение (value)│
+        │ ┌──────────────────────────────┐ │
+        │ │ контентная область:          │ │
+        │ │ кнопки, поля ввода, подсказки│ │
+        │ └──────────────────────────────┘ │
+        └──────────────────────────────────┘
+    """
 
     def __init__(self, number: int, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        # objectName используется в QSS для стилизации (см. styles.py).
         self.setObjectName("stepCard")
         self.setFrameShape(QFrame.Shape.NoFrame)
         self._number = number
@@ -80,8 +114,11 @@ class _StepCard(QFrame):
         self.set_state(_STATE_PENDING)
 
     def set_state(self, state: str) -> None:
+        """Переключение визуального состояния карточки (pending/active/done)."""
+        # Состояние пробрасывается в Qt-property, на него реагирует QSS.
         self.setProperty("state", state)
         self._badge.setProperty("state", state)
+        # У выполненной карточки бейдж показывает галочку вместо номера.
         if state == _STATE_DONE:
             self._badge.setText("✓")
         else:
@@ -104,14 +141,23 @@ class _StepCard(QFrame):
 
 
 class StepPanel(QWidget):
-    """Левая панель из 6 шагов: от создания проекта до экспорта DXF."""
+    """Левая панель из 6 шагов: от создания проекта до экспорта DXF.
 
+    Все взаимодействия с MainWindow идут через сигналы — панель не
+    знает о ядре (ContourDetector и др.) и о других виджетах. Это
+    держит её самостоятельной и тестируемой по отдельности.
+    """
+
+    # Сигналы-«запросы» к главному окну: пользователь нажал кнопку,
+    # окно должно выполнить соответствующее действие. На один сигнал
+    # может быть подключено любое количество слотов (или не подключено
+    # вовсе — паника не возникает).
     requestCreateProject = pyqtSignal()
     requestOpenProject = pyqtSignal()
     requestSaveProject = pyqtSignal()
     requestImportImage = pyqtSignal()
     requestStartCalibration = pyqtSignal()
-    requestApplyCanny = pyqtSignal(CannyParams)
+    requestApplyCanny = pyqtSignal(CannyParams)  # передаём актуальные параметры
     requestBuildSketch = pyqtSignal()
     requestExportDxf = pyqtSignal()
 
@@ -194,8 +240,11 @@ class StepPanel(QWidget):
         layout.addWidget(self._btn_calibrate)
 
     def _build_card4(self) -> None:
+        """Карточка «Контуры»: встроенные элементы Canny с живым превью."""
         layout = self._card4.content_layout()
 
+        # Парные элементы «слайдер + спинбокс» для удобного выбора значений
+        # порогов (0..255). Слайдер и спинбокс синхронизированы между собой.
         self._low_slider, self._low_spin = self._make_slider_spin(0, 255, 50)
         self._high_slider, self._high_spin = self._make_slider_spin(0, 255, 150)
 
@@ -235,11 +284,15 @@ class StepPanel(QWidget):
         self._contours_info.hide()
         layout.addWidget(self._contours_info)
 
+        # Таймер для debounce живого превью: пересчитывать контуры на
+        # каждое движение слайдера дорого, поэтому ждём 300 мс «тишины»
+        # и только тогда отправляем requestApplyCanny.
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(300)
         self._preview_timer.timeout.connect(self._emit_apply_canny)
 
+        # Любое изменение параметра запускает таймер (если включено авто).
         for w in (self._low_slider, self._high_slider, self._low_spin,
                   self._high_spin, self._gauss):
             w.valueChanged.connect(self._on_param_changed)
@@ -272,6 +325,7 @@ class StepPanel(QWidget):
 
     @staticmethod
     def _make_slider_spin(lo: int, hi: int, value: int) -> tuple[QSlider, QSpinBox]:
+        """Создаёт связку «слайдер + спинбокс» с двусторонней синхронизацией."""
         slider = QSlider(Qt.Orientation.Horizontal)
         slider.setRange(lo, hi)
         slider.setValue(value)
@@ -279,6 +333,9 @@ class StepPanel(QWidget):
         spin.setRange(lo, hi)
         spin.setValue(value)
         spin.setMinimumWidth(60)
+        # Двусторонняя связь: изменение одного отражается на другом.
+        # Бесконечного цикла нет — Qt не эмиттит valueChanged, если
+        # значение не изменилось.
         slider.valueChanged.connect(spin.setValue)
         spin.valueChanged.connect(slider.setValue)
         return slider, spin
@@ -315,18 +372,22 @@ class StepPanel(QWidget):
         return h
 
     def _on_param_changed(self, _value=None) -> None:
+        """Любое изменение параметра — перезапуск таймера живого превью."""
         if self._auto_check.isChecked():
             self._preview_timer.start()
 
     def _emit_apply_canny(self) -> None:
+        """Собирает текущие параметры и эмиттит requestApplyCanny."""
         low = int(self._low_spin.value())
         high = int(self._high_spin.value())
+        # Гарантия математически корректного порядка порогов: low < high.
         if low >= high:
             high = min(255, low + 1)
             self._high_spin.setValue(high)
         params = CannyParams(
             low_threshold=low,
             high_threshold=high,
+            # `| 1` принудительно делает ядро нечётным (требование OpenCV).
             gauss_kernel=int(self._gauss.value()) | 1,
             dp_epsilon=float(self._eps.value()),
         )
@@ -343,6 +404,13 @@ class StepPanel(QWidget):
         )
 
     def set_canny_params(self, params: CannyParams) -> None:
+        """Принудительная установка параметров без эмиссии сигналов.
+
+        Используется при восстановлении состояния из файла проекта,
+        чтобы программная установка значений не запустила живое превью.
+        """
+        # blockSignals временно отключает сигналы виджетов — иначе
+        # каждый setValue() запустит таймер и вызовет лишний пересчёт.
         for w in (self._low_spin, self._high_spin, self._gauss, self._eps,
                   self._low_slider, self._high_slider):
             w.blockSignals(True)
@@ -364,8 +432,20 @@ class StepPanel(QWidget):
             self._export_info.hide()
 
     def update_state(self, state: ProjectState) -> None:
+        """Главный метод синхронизации UI с текущим состоянием проекта.
+
+        Логика выбора состояния каждой карточки:
+            done   — этап выполнен (есть все необходимые данные);
+            active — текущий этап (предыдущий выполнен, этот ещё нет);
+            pending— этап ещё нельзя выполнить (нет предпосылок).
+
+        Здесь же переключаются primary-кнопки: главное действие
+        каждого активного шага визуально выделяется синим.
+        """
+        # Флаги «состояние пройдено» для каждого этапа.
         has_project = state.project is not None
         has_image = state.image_path is not None
+        # Калибровка считается заданной только если точки реально разнесены.
         has_calib = state.calibration is not None and (
             state.calibration.x1 != state.calibration.x2
             or state.calibration.y1 != state.calibration.y2
@@ -448,6 +528,8 @@ class StepPanel(QWidget):
                 self._card4.set_state(_STATE_PENDING)
         self._card4.show_content(has_image)
 
+        # При загрузке проекта подставляем сохранённые параметры Canny
+        # в виджеты, чтобы пользователь увидел свои прошлые настройки.
         if state.canny_params is not None:
             current = self.current_canny_params()
             if current != state.canny_params:

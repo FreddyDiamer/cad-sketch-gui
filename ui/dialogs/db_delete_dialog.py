@@ -1,3 +1,4 @@
+"""Диалог удаления записи из БД по ID с подтверждением."""
 from __future__ import annotations
 
 from PyQt6.QtWidgets import (
@@ -11,6 +12,8 @@ from PyQt6.QtWidgets import (
 
 
 class DbDeleteDialog(QDialog):
+    """Поле ввода ID + двухступенчатое подтверждение перед удалением."""
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Удаление из БД")
@@ -36,9 +39,12 @@ class DbDeleteDialog(QDialog):
         return self._id.text().strip()
 
     def _on_accept(self) -> None:
+        """Дополнительный диалог подтверждения — защита от случайного клика."""
         if not self.record_id:
             self._id.setFocus()
             return
+        # Удаление каскадно зачищает связанные записи (см. database_operations.py),
+        # поэтому требуем явного подтверждения.
         answer = QMessageBox.question(
             self,
             "Подтверждение",

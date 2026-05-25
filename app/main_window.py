@@ -1,3 +1,19 @@
+"""Главное окно приложения.
+
+Связывает три основные сущности интерфейса:
+
+    * WorkspaceView  — центральная рабочая область (изображение,
+                       контуры, эскиз, маркеры калибровки);
+    * StepPanel      — боковая панель из шести шагов-карточек,
+                       управляющая последовательностью действий;
+    * QToolBar       — компактная панель «Сохранить / Открыть /
+                       Закрыть / Меню».
+
+Все обработчики действий (создать проект, импорт изображения,
+калибровка, выделение контуров и т. д.) сосредоточены в этом классе.
+Связывание сигналов выполняется в __init__; собственно работа с
+файлами и алгоритмами делегируется классам из пакета core.
+"""
 from __future__ import annotations
 
 import math
@@ -38,17 +54,24 @@ from ui.dialogs.project_open_dialog import ProjectOpenDialog
 
 
 class MainWindow(QMainWindow):
+    """Главное окно приложения: визуальный «дирижёр» всех компонентов."""
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Подсистема формирования эскизов")
         self.resize(1280, 800)
 
+        # QSettings хранит пользовательские настройки между сеансами
+        # (последние каталоги импорта/экспорта и т. п.).
         self._settings = QSettings()
 
         # --- Состояние и core-сервисы ---
+        # Текущее состояние сеанса (проект, изображение, калибровка, эскиз).
         self._state = ProjectState()
+        # Алгоритмические компоненты ядра.
         self._contour_detector = ContourDetector()
         self._sketch_generator = SketchGenerator()
+        # Соединение с БД отложено: подключение по запросу пользователя.
         self._db = DatabaseOperations()
 
         # --- Центр: рабочая область с подложкой-подсказкой ---
@@ -63,6 +86,10 @@ class MainWindow(QMainWindow):
         self._empty_hint.setStyleSheet(
             "font-size: 18px; color: #8b949e; padding: 60px; line-height: 1.6;"
         )
+        # QStackedWidget показывает один из двух виджетов:
+        #   index 0 — подсказка «создайте проект»;
+        #   index 1 — рабочая область с изображением.
+        # Переключение происходит в _refresh_all() по наличию проекта.
         from PyQt6.QtWidgets import QStackedWidget
         self._center_stack = QStackedWidget()
         self._center_stack.addWidget(self._empty_hint)  # index 0
@@ -99,14 +126,17 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self._status_zoom)
         self.statusBar().showMessage("Готово")
 
-        # --- Сигналы workspace ---
+        # --- Сигналы рабочей области (workspace) ---
+        # Зум и позиция курсора — для статус-бара.
         self._workspace.zoomChanged.connect(self._on_zoom_changed)
         self._workspace.mouseScenePosChanged.connect(self._on_mouse_pos_changed)
+        # Сигналы режима калибровки: первая точка / завершено / отмена.
         self._workspace.calibrationPoint1Set.connect(self._on_calib_point1)
         self._workspace.calibrationCompleted.connect(self._on_calib_completed)
         self._workspace.calibrationCancelled.connect(self._on_calib_cancelled)
 
-        # --- Сигналы StepPanel ---
+        # --- Сигналы боковой панели шагов (StepPanel) ---
+        # Каждая карточка-шаг эмиттит сигнал, который окно превращает в действие.
         self._step_panel.requestCreateProject.connect(self._on_project_create)
         self._step_panel.requestOpenProject.connect(self._on_project_open)
         self._step_panel.requestSaveProject.connect(self._on_project_save)
@@ -116,17 +146,25 @@ class MainWindow(QMainWindow):
         self._step_panel.requestBuildSketch.connect(self._on_sketch_build)
         self._step_panel.requestExportDxf.connect(self._on_export_dxf)
 
-        # --- Тулбар ---
+        # --- Верхняя панель инструментов ---
         self._build_toolbar()
 
-        # --- Изначальная синхронизация ---
+        # Первичная синхронизация интерфейса с текущим (пустым) состоянием.
         self._refresh_all()
 
     # ============================================================ Toolbar
 
     def _build_toolbar(self) -> None:
+        """Создаёт компактную верхнюю панель: 4 кнопки + выпадающее меню.
+
+        Идея — большинство операций вынесено в боковую панель шагов,
+        а тулбар содержит только сквозные действия (сохранить, открыть,
+        закрыть) и кнопку «Меню» с второстепенными командами.
+        """
         tb = QToolBar("Главная панель")
         tb.setMovable(False)
+        # Только текст, без иконок: единый стиль и без зависимости
+        # от системных иконок Qt, которые ломали тёмную тему.
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         self.addToolBar(tb)
 
@@ -185,19 +223,22 @@ class MainWindow(QMainWindow):
         more_btn.setMenu(more_menu)
         tb.addWidget(more_btn)
 
-        # Регистрируем shortcut'ы на main window (через QAction) чтобы работали в любом месте
+        # Дублируем QAction зума на главном окне, чтобы горячие клавиши
+        # срабатывали даже когда меню не открыто (иначе шорткаты «спят»).
         for act in (act_fit, act_in, act_out, act_100):
             self.addAction(act)
 
     # ============================================================ Lifecycle
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        """Закрытие окна: предлагаем сохранить несохранённые изменения."""
         if not self._maybe_handle_unsaved():
             event.ignore()
             return
         super().closeEvent(event)
 
     def keyPressEvent(self, event) -> None:  # type: ignore[override]
+        """Escape во время калибровки — отмена режима и возврат к норме."""
         if event.key() == Qt.Key.Key_Escape and self._workspace.is_calibration_mode():
             self._workspace.set_calibration_mode(False)
             self._workspace.calibrationCancelled.emit()
@@ -208,12 +249,15 @@ class MainWindow(QMainWindow):
     # ============================================================ Project
 
     def _on_project_create(self) -> None:
+        """Шаг 1: создание нового проекта через диалоговое окно."""
+        # Не теряем несохранённые данные предыдущего проекта.
         if not self._maybe_handle_unsaved():
             return
         dlg = ProjectCreateDialog(self)
         if dlg.exec() != dlg.DialogCode.Accepted:
             return
         project = Project(name=dlg.project_name, project_file=dlg.project_file)
+        # Сразу помечаем как «грязное» — проект ещё не записан на диск.
         self._state = ProjectState(project=project, is_dirty=True)
         self._workspace.clear_all()
         self._log(f"Создан проект: {project.project_file}")
@@ -221,6 +265,7 @@ class MainWindow(QMainWindow):
         self._refresh_all()
 
     def _on_project_open(self) -> None:
+        """Открытие существующего проекта (.json) и восстановление состояния."""
         if not self._maybe_handle_unsaved():
             return
         dlg = ProjectOpenDialog(self)
@@ -233,7 +278,9 @@ class MainWindow(QMainWindow):
             return
         self._state = state
         self._workspace.clear_all()
-        # Если есть путь к изображению — загрузим
+        # Если в проекте указан путь к изображению — пытаемся загрузить
+        # его в рабочую область. Ошибки не фатальны: пользователь может
+        # импортировать изображение заново.
         if self._state.image_path is not None and self._state.image_path.exists():
             try:
                 self._workspace.set_image(ImageLoader.load(self._state.image_path))
@@ -244,6 +291,7 @@ class MainWindow(QMainWindow):
         self._refresh_all()
 
     def _on_project_save(self) -> None:
+        """Сохранение проекта в .json (без эскиза — он перестроится при открытии)."""
         if self._state.project is None:
             return
         try:
@@ -251,16 +299,19 @@ class MainWindow(QMainWindow):
         except Exception as e:  # noqa: BLE001
             self._show_error("Не удалось сохранить проект", str(e))
             return
+        # Сбрасываем «грязный» флаг — несохранённых изменений больше нет.
         self._state.is_dirty = False
         self._log(f"Проект сохранён: {self._state.project.project_file}")
         self.statusBar().showMessage("Проект сохранён")
         self._refresh_all()
 
     def _on_project_close(self) -> None:
+        """Закрытие проекта с предупреждением о несохранённых изменениях."""
         if self._state.project is None:
             return
         if not self._maybe_handle_unsaved():
             return
+        # Полный сброс состояния — начинаем «с чистого листа».
         self._state = ProjectState()
         self._workspace.clear_all()
         self._log("Проект закрыт")
@@ -270,8 +321,11 @@ class MainWindow(QMainWindow):
     # ============================================================ Image
 
     def _on_image_import(self) -> None:
+        """Шаг 2: импорт растрового изображения детали."""
         if self._state.project is None:
             return
+        # Открываем диалог в последней использованной папке (если есть),
+        # иначе — в папке проекта.
         start_dir = str(self._state.project.project_file.parent)
         last_dir = self._settings.value("paths/import_dir", "", type=str) or start_dir
         file_name, _ = QFileDialog.getOpenFileName(
@@ -293,9 +347,12 @@ class MainWindow(QMainWindow):
             self._show_error("Не удалось загрузить изображение", str(e))
             return
         self._state.image_path = path
+        # При новой картинке сбрасываем старые контуры и эскиз —
+        # они относились к предыдущему изображению.
         self._state.contours = None
         self._state.sketch = None
         self._state.is_dirty = True
+        # Запоминаем папку, чтобы в следующий раз открыть её первой.
         self._settings.setValue("paths/import_dir", str(path.parent))
         self._log(f"Импортировано: {path}")
         self.statusBar().showMessage(f"Загружено: {path.name}")
@@ -304,20 +361,28 @@ class MainWindow(QMainWindow):
     # ============================================================ Calibration
 
     def _on_calibration(self) -> None:
+        """Шаг 3: активирует режим интерактивной калибровки на изображении."""
         if self._state.project is None or self._state.image_path is None:
             return
+        # WorkspaceView сам обработает клики и эмиттит сигналы
+        # calibrationPoint1Set / calibrationCompleted.
         self._workspace.set_calibration_mode(True)
         self.statusBar().showMessage("Калибровка: кликните первую точку на изображении")
         self._log("Режим калибровки активирован")
 
     def _on_calib_point1(self, x: int, y: int) -> None:
+        """Реакция на первый клик: подсказка о следующем шаге."""
         self.statusBar().showMessage(
             f"Калибровка: первая точка ({x}, {y}) — кликните вторую точку"
         )
 
     def _on_calib_completed(self, x1: int, y1: int, x2: int, y2: int) -> None:
+        """Две точки заданы: запрашиваем реальное расстояние и сохраняем калибровку."""
+        # Расстояние между точками в пикселях нужно знать заранее,
+        # чтобы показать его в диалоге калибровки.
         pixel_dist = math.hypot(x2 - x1, y2 - y1)
         if pixel_dist < 1.0:
+            # Слишком близкие точки — масштаб будет недостоверным.
             self._show_warning("Калибровка", "Точки слишком близко.")
             self._workspace.set_calibration_mode(False)
             return
@@ -327,11 +392,14 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         accepted = dlg.exec() == dlg.DialogCode.Accepted
+        # Выходим из режима калибровки независимо от выбора пользователя.
         self._workspace.set_calibration_mode(False)
         if not accepted:
             self.statusBar().showMessage("Калибровка отменена")
             self._log("Калибровка отменена")
             return
+        # Сохраняем калибровку вместе с координатами опорных точек,
+        # чтобы при открытии проекта восстановить визуализацию.
         self._state.calibration = Calibration(
             real_distance=dlg.real_distance,
             units=dlg.units,
@@ -341,7 +409,7 @@ class MainWindow(QMainWindow):
         scale = self._state.calibration.scale_mm_per_pixel
         self._log(
             f"Калибровка: {dlg.real_distance:g} {dlg.units} "
-            f"({pixel_dist:.1f} px → {scale:.4f} мм/пкс)"
+            f"({pixel_dist:.1f} пикс. → {scale:.4f} мм/пкс)"
         )
         self.statusBar().showMessage(f"Калибровка: {dlg.real_distance:g} {dlg.units}")
         self._refresh_all()
@@ -353,8 +421,15 @@ class MainWindow(QMainWindow):
     # ============================================================ Canny (live)
 
     def _on_canny_apply(self, params: CannyParams) -> None:
+        """Шаг 4: запуск выделения контуров с указанными параметрами.
+
+        Вызывается как по кнопке «Применить», так и автоматически
+        при включённом авто-обновлении (живое превью, debounce 300 мс).
+        """
         if self._state.project is None or self._state.image_path is None:
             return
+        # Курсор «песочные часы» на время вычислений (Canny + морфология
+        # могут занимать заметное время для крупных изображений).
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             contours = self._contour_detector.detect(self._state.image_path, params)
@@ -366,11 +441,14 @@ class MainWindow(QMainWindow):
 
         self._state.canny_params = params
         self._state.contours = contours
-        self._state.sketch = None  # сбрасываем старый эскиз
+        # Старый эскиз больше не релевантен — он был построен по другим контурам.
+        self._state.sketch = None
         self._state.is_dirty = True
 
+        # Обновляем визуализацию: красные контуры; синий эскиз очищаем.
         self._workspace.show_contours(contours)
         self._workspace.show_sketch([])
+        # Статистика: общее количество контуров и сколько из них окружностей.
         n = len(contours)
         n_circ = sum(1 for e in contours if isinstance(e, Circle))
         self._log(
@@ -384,14 +462,17 @@ class MainWindow(QMainWindow):
     # ============================================================ Sketch
 
     def _on_sketch_build(self) -> None:
+        """Шаг 5: формирование эскиза из найденных контуров."""
         if self._state.project is None or not self._state.contours:
             return
+        # Эскиз = словарь {entities, scale}. Координаты остаются в пикселях.
         self._state.sketch = self._sketch_generator.build(
             self._state.contours, calibration=self._state.calibration
         )
         self._state.is_dirty = True
         entities = self._state.sketch.get("entities", [])
         if isinstance(entities, list):
+            # Накладываем синий эскиз поверх изображения.
             self._workspace.show_sketch(entities)
         self._log(f"Эскиз построен ({len(entities)} элементов)")
         self.statusBar().showMessage("Эскиз построен")
@@ -400,8 +481,10 @@ class MainWindow(QMainWindow):
     # ============================================================ DXF
 
     def _on_export_dxf(self) -> None:
+        """Шаг 6: экспорт эскиза в DXF + (опционально) запись в БД."""
         if self._state.project is None:
             return
+        # Извлекаем геометрические примитивы из словаря эскиза.
         entities: list[Polyline | Circle] = []
         if isinstance(self._state.sketch, dict):
             raw = self._state.sketch.get("entities", [])
@@ -414,6 +497,8 @@ class MainWindow(QMainWindow):
         if dlg.exec() != dlg.DialogCode.Accepted:
             return
         try:
+            # На случай если калибровка/параметры не заданы — берём дефолты,
+            # чтобы экспорт хотя бы прошёл (но получится в пикселях).
             FileOperations.export_dxf_placeholder(
                 target_file=dlg.target_file,
                 polylines=entities,
@@ -424,10 +509,14 @@ class MainWindow(QMainWindow):
         except Exception as e:  # noqa: BLE001
             self._show_error("Экспорт DXF не выполнен", str(e))
             return
+        # Запоминаем папку экспорта для следующих сессий.
         self._settings.setValue("paths/export_dir", str(dlg.target_file.parent))
         self._log(f"DXF экспортирован: {dlg.target_file}")
+        # Показываем имя файла в карточке шага 6.
         self._step_panel.set_export_info(dlg.target_file.name)
 
+        # Если открыто соединение с БД — параллельно фиксируем запись об обработке.
+        # Это не блокирует основной экспорт: ошибка БД не должна терять DXF.
         if self._db.is_connected and self._state.image_path is not None:
             try:
                 rec_id = self._db.save_image_record(
@@ -498,25 +587,30 @@ class MainWindow(QMainWindow):
     # ============================================================ Refresh
 
     def _refresh_all(self) -> None:
-        # Состояние действий тулбара
+        """Единая синхронизация всех элементов интерфейса с self._state.
+
+        Вызывается после любого изменения состояния. Дешевле, чем
+        пытаться обновлять каждый элемент точечно — и исключает рассинхрон.
+        """
         has_project = self._state.project is not None
+        # Кнопки тулбара: доступны только когда имеют смысл.
         self._act_save.setEnabled(has_project and self._state.is_dirty)
         self._act_close.setEnabled(has_project)
-        # Центр: подсказка или рабочая область
+        # Переключение центрального виджета: подсказка / рабочая область.
         self._center_stack.setCurrentIndex(1 if has_project else 0)
-        # Заголовок
+        # Заголовок окна: имя проекта со звёздочкой, если есть несохранённые правки.
         if has_project:
             dirty = "* " if self._state.is_dirty else ""
             self.setWindowTitle(f"{dirty}{self._state.project.name} — Подсистема эскизов")
         else:
             self.setWindowTitle("Подсистема формирования эскизов")
-        # Размер изображения в статус-баре
+        # Размеры изображения в статус-баре (правый блок).
         if self._state.image_path is not None:
             w, h = self._workspace.image_size()
             self._status_img.setText(f"{w}×{h}")
         else:
             self._status_img.setText("—")
-        # StepPanel
+        # Боковая панель шагов пересчитывает свои карточки сама.
         self._step_panel.update_state(self._state)
 
     # ============================================================ Helpers
@@ -531,6 +625,8 @@ class MainWindow(QMainWindow):
         self._status_pos.setText(f"Х: {p.x():.0f}   У: {p.y():.0f}")
 
     def _maybe_handle_unsaved(self) -> bool:
+        """Спрашивает про несохранённые изменения. True — можно продолжать."""
+        # Нет проекта или нечего сохранять — диалог не нужен.
         if self._state.project is None or not self._state.is_dirty:
             return True
         answer = QMessageBox.question(
@@ -542,10 +638,13 @@ class MainWindow(QMainWindow):
             | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )
+        # «Отмена» — пользователь передумал, операцию прерываем.
         if answer == QMessageBox.StandardButton.Cancel:
             return False
+        # «Нет» — продолжаем без сохранения.
         if answer == QMessageBox.StandardButton.No:
             return True
+        # «Да» — сохраняем; продолжать можно, если сохранение прошло успешно.
         self._on_project_save()
         return not self._state.is_dirty
 

@@ -1,9 +1,12 @@
+"""Диалог «О программе» с краткой информацией о подсистеме."""
 from __future__ import annotations
 
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
 
 class AboutDialog(QDialog):
+    """Информационный диалог без полей ввода."""
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("О программе")

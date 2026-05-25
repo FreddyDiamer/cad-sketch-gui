@@ -1,3 +1,4 @@
+"""Диалог открытия существующего проекта (.json)."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,6 +17,8 @@ from PyQt6.QtWidgets import (
 
 
 class ProjectOpenDialog(QDialog):
+    """Поле ввода пути + кнопка «Выбрать…» (QFileDialog) с фильтром *.json."""
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Открытие проекта")
@@ -63,7 +66,9 @@ class ProjectOpenDialog(QDialog):
             self._file_edit.setText(file_name)
 
     def _on_accept(self) -> None:
+        """Проверяет существование файла и корректность расширения."""
         path = Path(self._file_edit.text().strip())
+        # Двойная проверка: путь существует и это файл (не каталог).
         if not path.exists() or not path.is_file():
             self._file_edit.setToolTip("Укажите существующий файл проекта")
             self._file_edit.setFocus()

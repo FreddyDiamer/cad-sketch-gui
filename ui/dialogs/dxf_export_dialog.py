@@ -1,3 +1,9 @@
+"""Диалог экспорта эскиза в DXF.
+
+Имя файла по умолчанию формируется из имени проекта. Пользователь
+может либо вручную ввести путь, либо нажать «Выбрать…» и открыть
+системный диалог сохранения файла.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -58,8 +64,9 @@ class DxfExportDialog(QDialog):
         return self._target_file
 
     def _choose_file(self) -> None:
-        # Используем то, что уже введено в поле, как стартовое имя/путь —
-        # пользователь увидит привычное «<имя_проекта>.dxf» в системном диалоге.
+        """Открывает системный диалог сохранения файла."""
+        # Используем введённое значение как стартовое: пользователь
+        # увидит «<имя_проекта>.dxf» как имя по умолчанию в диалоге.
         start = self._file_edit.text().strip() or self._default_name
         file_name, _ = QFileDialog.getSaveFileName(
             self,
@@ -71,12 +78,14 @@ class DxfExportDialog(QDialog):
             self._file_edit.setText(file_name)
 
     def _on_accept(self) -> None:
+        """Валидация пути и автоматическая подстановка расширения .dxf."""
         raw = self._file_edit.text().strip()
         if not raw:
             self._file_edit.setToolTip("Укажите путь к файлу .dxf")
             self._file_edit.setFocus()
             return
         path = Path(raw)
+        # Если пользователь забыл расширение — подставляем его сами.
         if path.suffix.lower() != ".dxf":
             path = path.with_suffix(".dxf")
             self._file_edit.setText(str(path))

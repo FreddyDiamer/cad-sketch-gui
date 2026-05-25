@@ -1,3 +1,4 @@
+"""Диалог поиска записей в БД по подстроке пути к изображению."""
 from __future__ import annotations
 
 from PyQt6.QtWidgets import (
@@ -10,6 +11,8 @@ from PyQt6.QtWidgets import (
 
 
 class DbSearchDialog(QDialog):
+    """Простое поле ввода ключа поиска. Поиск выполняет MainWindow → БД."""
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Поиск в БД")

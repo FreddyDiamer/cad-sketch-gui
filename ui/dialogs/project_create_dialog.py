@@ -1,3 +1,9 @@
+"""Диалог создания нового проекта.
+
+Запрашивает у пользователя имя проекта и папку. Имя файла .json
+формируется автоматически из имени проекта (с заменой недопустимых
+для файловой системы символов на «_»).
+"""
 from __future__ import annotations
 
 import re
@@ -18,6 +24,8 @@ from PyQt6.QtWidgets import (
 
 
 class ProjectCreateDialog(QDialog):
+    """Модальный диалог: имя проекта + папка сохранения + кнопки OK/Отмена."""
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Создание проекта")
@@ -69,9 +77,11 @@ class ProjectCreateDialog(QDialog):
             self._dir_edit.setText(directory)
 
     def _on_accept(self) -> None:
+        """Валидация ввода и формирование пути к файлу проекта."""
         name = self.project_name
         directory = self._dir_edit.text().strip()
 
+        # Пустое имя — фокус возвращаем в поле, без закрытия диалога.
         if not name:
             self._name_edit.setFocus()
             self._name_edit.selectAll()
@@ -81,8 +91,10 @@ class ProjectCreateDialog(QDialog):
             self._dir_edit.setToolTip("Выберите папку проекта")
             return
 
+        # Безопасное имя файла: заменяем всё, кроме букв/цифр/«_»/«-», на «_».
         safe = re.sub(r"[^0-9A-Za-zА-Яа-я_-]+", "_", name).strip("_")
         if not safe:
+            # Подстраховка: если имя состояло только из спецсимволов.
             safe = "проект"
         self._project_file = Path(directory) / f"{safe}.json"
         self.accept()
