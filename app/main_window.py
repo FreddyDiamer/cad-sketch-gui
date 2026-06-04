@@ -46,6 +46,7 @@ from core.models import Calibration, CannyParams, Circle, Polyline, Project, Pro
 from core.sketch_generator import SketchGenerator
 from ui.dialogs.about_dialog import AboutDialog
 from ui.dialogs.calibration_dialog import CalibrationDialog
+from ui.dialogs.canny_help_dialog import CannyHelpDialog
 from ui.dialogs.db_connect_dialog import DbConnectDialog
 from ui.dialogs.db_delete_dialog import DbDeleteDialog
 from ui.dialogs.db_search_dialog import DbSearchDialog
@@ -237,6 +238,7 @@ class MainWindow(QMainWindow):
         view_menu.addAction(self._act_toggle_log)
 
         more_menu.addSeparator()
+        more_menu.addAction("Параметры обработки…", self._on_canny_help)
         more_menu.addAction("О программе", self._on_about)
         more_menu.addSeparator()
         act_quit = QAction("Выход", self)
@@ -603,7 +605,11 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.warning(self, "База данных", "Запись не найдена.")
 
-    # ============================================================ About
+    # ============================================================ Help / About
+
+    def _on_canny_help(self) -> None:
+        """Справка по параметрам обработки изображения (шаг «Контуры»)."""
+        CannyHelpDialog(self).exec()
 
     def _on_about(self) -> None:
         AboutDialog(self).exec()
