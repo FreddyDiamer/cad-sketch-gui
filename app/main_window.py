@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
 )
 
 from app.step_panel import StepPanel
+from app.styles import THEME_DARK, THEME_LIGHT, get_palette, get_qss
 from app.workspace_view import WorkspaceView
 from core.contour_detector import ContourDetector
 from core.database_operations import DatabaseOperations
@@ -73,6 +74,10 @@ class MainWindow(QMainWindow):
         self._sketch_generator = SketchGenerator()
         # Соединение с БД отложено: подключение по запросу пользователя.
         self._db = DatabaseOperations()
+
+        # Текущая тема — читается из QSettings (по умолчанию тёмная).
+        # Реально стиль приложения применяется ниже, после построения UI.
+        self._theme: str = self._settings.value("ui/theme", THEME_DARK, type=str)
 
         # --- Центр: рабочая область с подложкой-подсказкой ---
         self._workspace = WorkspaceView()
@@ -149,6 +154,9 @@ class MainWindow(QMainWindow):
         # --- Верхняя панель инструментов ---
         self._build_toolbar()
 
+        # Применяем выбранную ранее тему (стиль + фон рабочей области).
+        self._apply_theme(self._theme)
+
         # Первичная синхронизация интерфейса с текущим (пустым) состоянием.
         self._refresh_all()
 
@@ -206,6 +214,22 @@ class MainWindow(QMainWindow):
         act_out.setShortcut(QKeySequence.StandardKey.ZoomOut)
         act_100 = view_menu.addAction("100%", self._workspace.zoom_100)
         act_100.setShortcut(QKeySequence("Ctrl+0"))
+        view_menu.addSeparator()
+
+        # Подменю выбора темы. Действия checkable + автоматическая группа
+        # (через ручную взаимоисключающую логику в _on_theme_*), чтобы
+        # одновременно стояла галочка только у одной темы.
+        theme_menu = view_menu.addMenu("Тема")
+        self._act_theme_dark = QAction("Тёмная", self, checkable=True)
+        self._act_theme_light = QAction("Светлая", self, checkable=True)
+        self._act_theme_dark.triggered.connect(lambda: self._on_theme_change(THEME_DARK))
+        self._act_theme_light.triggered.connect(lambda: self._on_theme_change(THEME_LIGHT))
+        theme_menu.addAction(self._act_theme_dark)
+        theme_menu.addAction(self._act_theme_light)
+        # Изначальное состояние галочек — по текущей теме.
+        self._act_theme_dark.setChecked(self._theme == THEME_DARK)
+        self._act_theme_light.setChecked(self._theme == THEME_LIGHT)
+
         view_menu.addSeparator()
         self._act_toggle_log = QAction("Показать журнал", self, checkable=True)
         self._act_toggle_log.toggled.connect(self._dock_log.setVisible)
@@ -583,6 +607,39 @@ class MainWindow(QMainWindow):
 
     def _on_about(self) -> None:
         AboutDialog(self).exec()
+
+    # ============================================================ Theme
+
+    def _apply_theme(self, theme: str) -> None:
+        """Применяет выбранную тему: глобальный QSS + фон рабочей области.
+
+        QSettings обновляется здесь же, поэтому при перезапуске тема
+        восстановится автоматически.
+        """
+        self._theme = theme
+        palette = get_palette(theme)
+        # Глобальный стиль приложения — единая точка истины для всех виджетов.
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(get_qss(theme))
+        # Фон рабочей области задаётся отдельно, потому что QGraphicsView
+        # не подхватывает background-color из QSS для своей сцены.
+        self._workspace.set_background_color(palette.bg_workspace)
+        # Сохраняем выбор пользователя между запусками.
+        self._settings.setValue("ui/theme", theme)
+
+    def _on_theme_change(self, theme: str) -> None:
+        """Обработчик пунктов меню «Тёмная» / «Светлая»."""
+        # Если пользователь повторно кликнул на ту же тему — оставляем галочку.
+        if theme == self._theme:
+            self._act_theme_dark.setChecked(self._theme == THEME_DARK)
+            self._act_theme_light.setChecked(self._theme == THEME_LIGHT)
+            return
+        self._apply_theme(theme)
+        # Синхронизируем галочки: ровно одна должна быть отмечена.
+        self._act_theme_dark.setChecked(theme == THEME_DARK)
+        self._act_theme_light.setChecked(theme == THEME_LIGHT)
+        self._log(f"Тема: {'светлая' if theme == THEME_LIGHT else 'тёмная'}")
 
     # ============================================================ Refresh
 

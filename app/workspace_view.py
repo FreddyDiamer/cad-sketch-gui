@@ -79,6 +79,11 @@ class WorkspaceView(QGraphicsView):
         self._calib_point1: tuple[int, int] | None = None  # координаты первой точки
         self._calib_items: list[QGraphicsItem] = []        # маркеры и линия на сцене
 
+    def set_background_color(self, color: str) -> None:
+        """Меняет цвет фона сцены и viewport'а (используется при смене темы)."""
+        self._scene.setBackgroundBrush(QColor(color))
+        self.setBackgroundBrush(QColor(color))
+
     def clear_all(self) -> None:
         self._scene.clear()
         self._image_item = None

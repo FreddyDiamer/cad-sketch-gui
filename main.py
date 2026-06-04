@@ -5,10 +5,11 @@
 """
 import sys
 
+from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QApplication
 
 from app.main_window import MainWindow
-from app.styles import DARK_QSS
+from app.styles import THEME_DARK, get_qss
 
 
 def main() -> int:
@@ -20,8 +21,10 @@ def main() -> int:
     # «Fusion» — единая стилистическая база для QSS на всех платформах:
     # Windows/macOS/Linux выглядят одинаково и одинаково реагируют на QSS.
     app.setStyle("Fusion")
-    # Глобальный тёмный стиль применяется один раз ко всему приложению.
-    app.setStyleSheet(DARK_QSS)
+    # Стиль из ранее выбранной темы — чтобы не мелькала тёмная перед светлой.
+    # MainWindow повторно применит ту же тему через _apply_theme().
+    theme = QSettings().value("ui/theme", THEME_DARK, type=str)
+    app.setStyleSheet(get_qss(theme))
 
     window = MainWindow()
     window.show()
