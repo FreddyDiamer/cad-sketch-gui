@@ -42,7 +42,7 @@ from core.contour_detector import ContourDetector
 from core.database_operations import DatabaseOperations
 from core.file_operations import FileOperations
 from core.image_loader import ImageLoader
-from core.models import Calibration, CannyParams, Circle, Polyline, Project, ProjectState
+from core.models import Arc, Calibration, CannyParams, Circle, Polyline, Project, ProjectState
 from core.sketch_generator import SketchGenerator
 from ui.dialogs.about_dialog import AboutDialog
 from ui.dialogs.calibration_dialog import CalibrationDialog
@@ -474,13 +474,14 @@ class MainWindow(QMainWindow):
         # Обновляем визуализацию: красные контуры; синий эскиз очищаем.
         self._workspace.show_contours(contours)
         self._workspace.show_sketch([])
-        # Статистика: общее количество контуров и сколько из них окружностей.
+        # Статистика: общее количество и разбивка по типам примитивов.
         n = len(contours)
         n_circ = sum(1 for e in contours if isinstance(e, Circle))
+        n_arc = sum(1 for e in contours if isinstance(e, Arc))
         self._log(
             f"Canny: {params.low_threshold}/{params.high_threshold}, "
             f"gauss={params.gauss_kernel}, eps={params.dp_epsilon:.2f}, "
-            f"контуров: {n} (окружностей: {n_circ})"
+            f"контуров: {n} (окружностей: {n_circ}, дуг: {n_arc})"
         )
         self.statusBar().showMessage(f"Контуры: {n}")
         self._refresh_all()
@@ -511,11 +512,11 @@ class MainWindow(QMainWindow):
         if self._state.project is None:
             return
         # Извлекаем геометрические примитивы из словаря эскиза.
-        entities: list[Polyline | Circle] = []
+        entities: list[Polyline | Circle | Arc] = []
         if isinstance(self._state.sketch, dict):
             raw = self._state.sketch.get("entities", [])
             if isinstance(raw, list):
-                entities = [e for e in raw if isinstance(e, (Polyline, Circle))]
+                entities = [e for e in raw if isinstance(e, (Polyline, Circle, Arc))]
         if not entities:
             self._show_warning("Экспорт DXF", "Сначала постройте эскиз (шаг 5).")
             return

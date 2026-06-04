@@ -14,12 +14,13 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict
 from pathlib import Path
 
 import ezdxf
 
-from core.models import Calibration, CannyParams, Circle, Polyline, Project, ProjectState
+from core.models import Arc, Calibration, CannyParams, Circle, Polyline, Project, ProjectState
 
 
 class FileOperations:
@@ -108,12 +109,12 @@ class FileOperations:
     @staticmethod
     def export_dxf_placeholder(
         target_file: Path,
-        polylines: list[Polyline | Circle],
+        polylines: list[Polyline | Circle | Arc],
         project: Project,
         calibration: Calibration,
         canny_params: CannyParams,
     ) -> None:
-        """Экспорт эскиза в DXF (LWPOLYLINE + CIRCLE, слой SKETCH, единицы мм).
+        """Экспорт эскиза в DXF (LWPOLYLINE + CIRCLE + ARC, слой SKETCH, единицы мм).
 
         Координаты примитивов в `polylines` хранятся в пикселях
         изображения; перевод в миллиметры выполняется здесь умножением
@@ -137,13 +138,27 @@ class FileOperations:
         if scale <= 0:
             scale = 1.0
 
-        # Запись примитивов: окружности → CIRCLE, ломаные → LWPOLYLINE.
+        # Запись примитивов: окружности → CIRCLE, дуги → ARC, ломаные → LWPOLYLINE.
         for ent in polylines:
             if isinstance(ent, Circle):
                 # Окружность сохраняется как нативный примитив, а не как
                 # многоугольник, чтобы CAD-система видела её как круг.
                 msp.add_circle(
                     (ent.cx * scale, ent.cy * scale), ent.radius * scale,
+                    dxfattribs={"layer": "SKETCH"},
+                )
+                continue
+            if isinstance(ent, Arc):
+                # Дуга записывается нативным примитивом ARC. ezdxf
+                # принимает углы в градусах в той же ориентации, что и
+                # наши atan2-углы — координатная система DXF при импорте
+                # инвертирует Y вместе с углами консистентно, так что
+                # числовые значения углов передаются без преобразования.
+                msp.add_arc(
+                    center=(ent.cx * scale, ent.cy * scale),
+                    radius=ent.radius * scale,
+                    start_angle=math.degrees(ent.start_angle),
+                    end_angle=math.degrees(ent.end_angle),
                     dxfattribs={"layer": "SKETCH"},
                 )
                 continue

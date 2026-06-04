@@ -36,6 +36,26 @@ class Circle:
 
 
 @dataclass(frozen=True)
+class Arc:
+    """Дуга окружности — часть окружности от start_angle до end_angle.
+
+    Углы хранятся в радианах в convention `atan2(dy, dx)` относительно
+    центра (cx, cy), где dx/dy — приращения в пиксельных координатах
+    изображения (Y направлена вниз). Гарантируется `end_angle > start_angle`
+    (по необходимости к end_angle прибавлено 2π).
+
+    При экспорте в DXF дуга записывается как примитив ARC; в рабочей
+    области отрисовывается через QPainterPath.arcTo.
+    """
+
+    cx: float
+    cy: float
+    radius: float
+    start_angle: float    # радианы
+    end_angle: float      # радианы, end_angle > start_angle
+
+
+@dataclass(frozen=True)
 class Calibration:
     """Двухточечная калибровка масштаба изображения.
 

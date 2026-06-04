@@ -12,6 +12,7 @@ WorkspaceView построен на QGraphicsView/QGraphicsScene и отвеча
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
@@ -28,7 +29,7 @@ from PyQt6.QtWidgets import (
     QGraphicsView,
 )
 
-from core.models import Circle, Polyline
+from core.models import Arc, Circle, Polyline
 
 class WorkspaceView(QGraphicsView):
     """Рабочая область: изображение + слои контуров, эскиза и калибровки."""
@@ -290,7 +291,7 @@ class WorkspaceView(QGraphicsView):
             )
         ]
 
-    def show_contours(self, contours: list[Polyline]) -> None:
+    def show_contours(self, contours: list[Polyline | Circle | Arc]) -> None:
         """Отображает слой контуров (красный) поверх изображения."""
         self._draw_polylines(
             target_list=self._contour_items,
@@ -300,7 +301,7 @@ class WorkspaceView(QGraphicsView):
             z=10,  # выше изображения (z=0), ниже эскиза (z=20)
         )
 
-    def show_sketch(self, sketch_entities: list[Polyline]) -> None:
+    def show_sketch(self, sketch_entities: list[Polyline | Circle | Arc]) -> None:
         """Отображает слой эскиза (синий) поверх контуров."""
         self._draw_polylines(
             target_list=self._sketch_items,
@@ -313,7 +314,7 @@ class WorkspaceView(QGraphicsView):
     def _draw_polylines(
         self,
         target_list: list[QGraphicsItem],
-        polylines: list[Polyline | Circle],
+        polylines: list[Polyline | Circle | Arc],
         color: QColor,
         width: int,
         z: int,
@@ -322,7 +323,8 @@ class WorkspaceView(QGraphicsView):
 
         Сначала удаляет старые элементы слоя, затем добавляет новые.
         Окружности рисуются как QGraphicsEllipseItem (нативные круги),
-        ломаные — как QGraphicsPathItem через QPainterPath.
+        дуги — как QGraphicsPathItem через QPainterPath.arcTo,
+        ломаные — как QGraphicsPathItem с moveTo/lineTo.
         """
         # Удаляем старые элементы этого слоя — иначе они накопятся при повторных вызовах.
         for item in target_list:
@@ -345,6 +347,27 @@ class WorkspaceView(QGraphicsView):
                     ent.cx - ent.radius, ent.cy - ent.radius,
                     ent.radius * 2, ent.radius * 2,
                 )
+                item.setPen(pen)
+            elif isinstance(ent, Arc):
+                # Дуга через QPainterPath.arcTo. Особенности Qt:
+                #   * 0° = 3 часа, положительный угол = против часовой стрелки;
+                #   * в системе с Y вниз «против часовой» Qt = «по часовой» визуально;
+                # Наши atan2-углы измерены в пикселях (Y вниз), поэтому конверсия:
+                #   Qt_start_deg  = -start_angle (в градусах)
+                #   Qt_sweep_deg  = -(end_angle - start_angle) (в градусах)
+                # Знак минус обращает направление обхода так, чтобы дуга
+                # визуально проходила через те же точки, что и в исходном контуре.
+                rect = QRectF(
+                    ent.cx - ent.radius, ent.cy - ent.radius,
+                    ent.radius * 2, ent.radius * 2,
+                )
+                start_deg = -math.degrees(ent.start_angle)
+                sweep_deg = -math.degrees(ent.end_angle - ent.start_angle)
+                path = QPainterPath()
+                # arcMoveTo помещает «перо» в начало дуги без проведения линии.
+                path.arcMoveTo(rect, start_deg)
+                path.arcTo(rect, start_deg, sweep_deg)
+                item = QGraphicsPathItem(path)
                 item.setPen(pen)
             else:
                 # Ломаная: строим путь по точкам последовательно.

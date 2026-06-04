@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core.models import CannyParams, Circle, Polyline, ProjectState
+from core.models import Arc, CannyParams, Circle, Polyline, ProjectState
 
 
 # Имена состояний карточки. Используются как значения Qt-property
@@ -514,9 +514,11 @@ class StepPanel(QWidget):
         if has_contours:
             n_total = len(state.contours)
             n_circ = sum(1 for e in state.contours if isinstance(e, Circle))
-            n_poly = n_total - n_circ
+            n_arc = sum(1 for e in state.contours if isinstance(e, Arc))
+            n_poly = n_total - n_circ - n_arc
             self._contours_info.setText(
-                f"Найдено: {n_total} ({n_poly} полилиний, {n_circ} окружностей)"
+                f"Найдено: {n_total} "
+                f"({n_poly} полилиний, {n_circ} окружностей, {n_arc} дуг)"
             )
             self._contours_info.show()
             self._card4.set_state(_STATE_DONE)
@@ -539,8 +541,11 @@ class StepPanel(QWidget):
         if has_sketch:
             entities = state.sketch.get("entities", [])
             n_circ = sum(1 for e in entities if isinstance(e, Circle))
+            n_arc = sum(1 for e in entities if isinstance(e, Arc))
             n_poly = sum(1 for e in entities if isinstance(e, Polyline))
-            self._sketch_info.setText(f"{n_poly} полилиний, {n_circ} окружностей")
+            self._sketch_info.setText(
+                f"{n_poly} полилиний, {n_circ} окружностей, {n_arc} дуг"
+            )
             self._sketch_info.show()
             self._card5.set_state(_STATE_DONE)
             self._card5.show_content(True)
